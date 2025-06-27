@@ -180,7 +180,7 @@ cairo_surface_t *html_widget::load_image(const std::string &path)
 
 }
 
-void html_widget::open_page(const litehtml::string& url, const litehtml::string& hash)
+void html_widget::open_page(const litehtml::string& url, const litehtml::string& fragment)
 {
 	{
 		std::lock_guard<std::mutex> lock(m_page_mutex);
@@ -189,7 +189,7 @@ void html_widget::open_page(const litehtml::string& url, const litehtml::string&
 			m_current_page->stop_loading();
 		}
 		m_next_page = std::make_shared<litebrowser::web_page>(this, m_notifier, 10);
-		m_next_page->open(url, hash);
+		m_next_page->open(url, fragment);
 	}
 	m_sig_set_address.emit(url);
 	m_sig_update_state.emit(get_state());
@@ -203,7 +203,7 @@ void html_widget::scroll_to(int x, int y)
 
 void html_widget::on_redraw()
 {
-	m_draw_buffer.redraw(current_page());
+	m_draw_buffer.redraw(get_draw_function(current_page()));
 	queue_draw();
 }
 
@@ -416,16 +416,16 @@ void html_widget::size_allocate_vfunc(int width, int height, int /* baseline */)
 		{
 			m_rendered_width = width;
 			m_rendered_height = height;
-			m_draw_buffer.on_size_allocate(page, width, height);
+			m_draw_buffer.on_size_allocate(get_draw_function(page), width, height);
 			page->media_changed();
 			page->render(m_rendered_width);
 			update_view_port(page);
-			m_draw_buffer.redraw(page);
+			m_draw_buffer.redraw(get_draw_function(page));
 			queue_draw();
 		}
 	} else
 	{
-		m_draw_buffer.on_size_allocate(page, width, height);
+		m_draw_buffer.on_size_allocate(get_draw_function(page), width, height);
 	}
 
 }
@@ -459,9 +459,11 @@ void html_widget::allocate_scrollbars(int width, int height)
 
 void html_widget::on_vadjustment_changed()
 {
-	m_draw_buffer.on_scroll(	current_page(),
-								(int) m_hadjustment->get_value(),
-								(int) m_vadjustment->get_value());
+	auto page = current_page();
+	m_draw_buffer.on_scroll(get_draw_function(page),
+		(int) m_hadjustment->get_value(),
+		(int) m_vadjustment->get_value(),
+		page ? page->get_fixed_boxes() : litehtml::position::vector{});
 
 	if(m_do_force_redraw_on_adjustment)
 	{
@@ -474,9 +476,12 @@ void html_widget::on_vadjustment_changed()
 
 void html_widget::on_hadjustment_changed()
 {
-	m_draw_buffer.on_scroll(	current_page(),
-								(int) m_hadjustment->get_value(),
-								(int) m_vadjustment->get_value());
+	auto page = current_page();
+	m_draw_buffer.on_scroll(get_draw_function(page),
+		(int) m_hadjustment->get_value(),
+		(int) m_vadjustment->get_value(),
+		page ? page->get_fixed_boxes() : litehtml::position::vector{});
+
 	if(m_do_force_redraw_on_adjustment)
 	{
 		force_redraw();
@@ -512,21 +517,17 @@ void html_widget::on_realize()
 {
 	Gtk::Widget::on_realize();
 
-	auto native = get_native();
-	if(native)
+	if(auto native = get_native())
 	{
-		auto surface = native->get_surface();
-		if(surface)
+		if(auto surface = native->get_surface())
 		{
 			surface->property_scale().signal_changed().connect([this]()
 			{
-				auto native = get_native();
-				if(native)
+				if(auto native = get_native())
 				{
-					auto surface = native->get_surface();
-					if(surface)
+					if(auto surface = native->get_surface())
 					{
-						m_draw_buffer.set_scale_factor(current_page(), surface->get_scale());
+						m_draw_buffer.set_scale_factor(get_draw_function(current_page()), surface->get_scale());
 						queue_draw();
 					}
 				}
@@ -592,7 +593,7 @@ void html_widget::redraw_boxes(const litehtml::position::vector& boxes)
 
 	if(!rect.has_zero_area())
 	{
-		m_draw_buffer.redraw_area(current_page(), rect.get_x(), rect.get_y(), rect.get_width(), rect.get_height());
+		m_draw_buffer.redraw_area(get_draw_function(current_page()), rect.get_x(), rect.get_y(), rect.get_width(), rect.get_height());
 		queue_draw();
 	}
 }
@@ -619,37 +620,37 @@ void html_widget::on_page_loaded(uint64_t web_page_id)
 	m_sig_update_state.emit(get_state());
 }
 
-void html_widget::show_hash(const std::string &hash)
+void html_widget::show_fragment(const std::string &fragment)
 {
 	std::shared_ptr<litebrowser::web_page> page = current_page();
 	if(page)
 	{
-		page->show_hash(hash);
+		page->show_fragment(fragment);
 	}
 }
 
 void html_widget::open_url(const std::string &url)
 {
-	std::string hash;
+	std::string fragment;
 	std::string s_url = url;
 
 	m_sig_set_address.emit(url);
 
-	std::string::size_type hash_pos = s_url.find_first_of(L'#');
-	if(hash_pos != std::wstring::npos)
+	std::string::size_type fragment_pos = s_url.find_first_of(L'#');
+	if(fragment_pos != std::wstring::npos)
 	{
-		hash = s_url.substr(hash_pos + 1);
-		s_url.erase(hash_pos);
+		fragment = s_url.substr(fragment_pos + 1);
+		s_url.erase(fragment_pos);
 	}
 
 	bool open_hash_only = false;
 	bool reload = false;
 
 	auto current_url = m_history.current();
-	hash_pos = current_url.find_first_of(L'#');
-	if(hash_pos != std::wstring::npos)
+	fragment_pos = current_url.find_first_of(L'#');
+	if(fragment_pos != std::wstring::npos)
 	{
-		current_url.erase(hash_pos);
+		current_url.erase(fragment_pos);
 	}
 
 	if(!current_url.empty())
@@ -667,10 +668,10 @@ void html_widget::open_url(const std::string &url)
 	}
 	if(!open_hash_only)
 	{
-		open_page(url, hash);
+		open_page(url, fragment);
 	} else
 	{
-		show_hash(hash);
+		show_fragment(fragment);
 	}
 	if(!reload)
 	{
@@ -686,7 +687,7 @@ void html_widget::render()
 	{
 		page->render(m_draw_buffer.get_width());
 		update_view_port(page);
-		m_draw_buffer.redraw(page);
+		m_draw_buffer.redraw(get_draw_function(page));
 		queue_draw();
 	}
 }

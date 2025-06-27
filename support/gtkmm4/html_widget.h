@@ -4,7 +4,7 @@
 #include "html_host.h"
 #include "web_page.h"
 #include "web_history.h"
-#include "draw_buffer.h"
+#include "../draw_buffer/draw_buffer.h"
 #include <queue>
 
 enum page_state
@@ -235,7 +235,7 @@ public:
 	std::string get_html_source();
     long render_measure(int number);
     long draw_measure(int number);
-	void show_hash(const std::string& hash);
+	void show_fragment(const std::string& fragment);
 	bool on_close();
 	void dump(litehtml::dumper& cout);
 
@@ -246,7 +246,7 @@ protected:
 	double get_dpi() override;
 	int get_screen_width() override;
 	int get_screen_height() override;
-	void open_page(const litehtml::string& url, const litehtml::string& hash);
+	void open_page(const litehtml::string& url, const litehtml::string& fragment);
 	void update_cursor() override;
 	void redraw_boxes(const litehtml::position::vector& boxes) override;
 	int get_render_width() override;
@@ -286,6 +286,16 @@ private:
 	{
 		queue_draw();
 		while (g_main_context_iteration(nullptr, false)) {}
+	}
+	litebrowser::draw_buffer::draw_page_function_t get_draw_function(const std::shared_ptr<litebrowser::web_page>& page)
+	{
+		return [this, page](cairo_t* cr, int x, int y, const litehtml::position* clip)
+		{
+			if (page)
+			{
+				page->draw((litehtml::uint_ptr) cr, x, y, clip);
+			}
+		};
 	}
 
 public:

@@ -21,7 +21,7 @@ void litebrowser::text_file::on_page_downloaded(u_int32_t http_status,
 	wait_mutex.unlock();
 }
 
-void litebrowser::web_page::open(const std::string &url, const std::string &hash)
+void litebrowser::web_page::open(const std::string &url, const std::string &fragment)
 {
 	litehtml::url l_url(url);
 
@@ -39,11 +39,15 @@ void litebrowser::web_page::open(const std::string &url, const std::string &hash
 		m_url = url;
 	}
 	m_base_url = m_url;
-	m_hash = hash;
+	m_fragment = fragment;
 
 	auto data = std::make_shared<text_file>();
-	auto cb_on_data = [data](auto && PH1, auto && PH2, auto && PH3, auto && PH4) mutable { data->on_data(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2), std::forward<decltype(PH3)>(PH3), std::forward<decltype(PH4)>(PH4)); };
-	auto cb_on_finish = std::bind(&web_page::on_page_downloaded, shared_from_this(), data, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+	auto cb_on_data = [data](void* in_data, size_t len, size_t /*downloaded*/, size_t /*total*/) { data->on_data(in_data, len, 0, 0); };
+	auto shared_this = shared_from_this();
+	auto cb_on_finish = [shared_this, data](u_int32_t http_status, u_int32_t err_code, const std::string &err_text, const std::string& url)
+	{
+		shared_this->on_page_downloaded(data, http_status, err_code, err_text, url);
+	};
 	http_request(m_url, cb_on_data, cb_on_finish);
 }
 
@@ -78,8 +82,11 @@ void litebrowser::web_page::import_css(litehtml::string& text, const litehtml::s
 	make_url(url.c_str(), baseurl.c_str(), css_url);
 
 	auto data = std::make_shared<text_file>();
-	auto cb_on_data = std::bind(&text_file::on_data, data, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
-	auto cb_on_finish = std::bind(&text_file::on_page_downloaded, data, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+	auto cb_on_data = [data](void* in_data, size_t len, size_t /*downloaded*/, size_t /*total*/) { data->on_data(in_data, len, 0, 0); };
+	auto cb_on_finish = [data](u_int32_t http_status, u_int32_t err_code, const std::string &err_text, const std::string& /*url*/)
+	{
+		data->on_page_downloaded(http_status, err_code, err_text);
+	};
 	http_request(css_url, cb_on_data, cb_on_finish);
 	data->wait();
 	text = data->str();
@@ -110,21 +117,17 @@ cairo_surface_t* litebrowser::web_page::get_image(const std::string& url)
 	return m_images.get_image(url);
 }
 
-void litebrowser::web_page::show_hash(const litehtml::string& hash)
+void litebrowser::web_page::show_fragment(const litehtml::string& fragment)
 {
 	std::lock_guard<std::recursive_mutex> html_lock(m_html_mutex);
-	if(hash.empty() || !m_html)
+	if(fragment.empty() || !m_html)
 	{
 		m_html_host->scroll_to(0, 0);
 	} else
 	{
-		std::string selector = "#" + hash;
+		auto escaped_hash = litehtml::get_escaped_string(fragment);
+		std::string selector = ":is([id=\"" + escaped_hash + "\"],[name=\"" + escaped_hash + "\"])";
 		litehtml::element::ptr el = m_html->root()->select_one(selector);
-		if (!el)
-		{
-			selector = "[name=" + hash + "]";
-			el = m_html->root()->select_one(selector);
-		}
 		if (el)
 		{
 			litehtml::position pos = el->get_placement();
@@ -260,8 +263,13 @@ void litebrowser::web_page::load_image(const char *src, const char *baseurl, boo
 	if(m_images.reserve(url))
 	{
 		auto data = std::make_shared<image_file>(url, redraw_on_ready);
-		auto cb_on_data = std::bind(&image_file::on_data, data, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
-		auto cb_on_finish = std::bind(&web_page::on_image_downloaded, this, data, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+		auto cb_on_data = [data](void* in_data, size_t len, size_t /*downloaded*/, size_t /*total*/) { data->on_data(in_data, len, 0, 0); };
+		auto shared_this = shared_from_this();
+		auto cb_on_finish = [shared_this, data](u_int32_t http_status, u_int32_t err_code, const std::string &err_text, const std::string& url)
+		{
+			shared_this->on_image_downloaded(data, http_status, err_code, err_text, url);
+		};
+
 		http_request(url, cb_on_data, cb_on_finish);
 	}
 }
