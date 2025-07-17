@@ -4,12 +4,56 @@ project(litehtml LANGUAGES C CXX)
 
 option(LITEHTML_BUILD_TESTING "enable testing for litehtml" OFF)
 
+# Git-based versioning
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(GetGitRevisionDescription)
+find_package(Git QUIET)
+
+# Get version from git tag
+git_describe(GIT_DESCRIBE_VERSION --tags --long --dirty)
+git_get_exact_tag(GIT_EXACT_TAG --tags)
+
+# Parse version from git describe output
+if(GIT_DESCRIBE_VERSION MATCHES "^v?([0-9]+)\\.([0-9]+)\\.([0-9]+)(-([0-9]+)-g[0-9a-f]+(-dirty)?)?$")
+    set(LITEHTML_VERSION_MAJOR ${CMAKE_MATCH_1})
+    set(LITEHTML_VERSION_MINOR ${CMAKE_MATCH_2})
+    set(LITEHTML_VERSION_PATCH ${CMAKE_MATCH_3})
+    set(LITEHTML_VERSION_BUILD ${CMAKE_MATCH_5})
+    set(LITEHTML_VERSION_DIRTY ${CMAKE_MATCH_6})
+    
+    set(LITEHTML_VERSION_STRING "${LITEHTML_VERSION_MAJOR}.${LITEHTML_VERSION_MINOR}.${LITEHTML_VERSION_PATCH}")
+    if(LITEHTML_VERSION_BUILD)
+        set(LITEHTML_VERSION_FULL "${LITEHTML_VERSION_STRING}-${LITEHTML_VERSION_BUILD}")
+    else()
+        set(LITEHTML_VERSION_FULL "${LITEHTML_VERSION_STRING}")
+    endif()
+    if(LITEHTML_VERSION_DIRTY)
+        set(LITEHTML_VERSION_FULL "${LITEHTML_VERSION_FULL}-dirty")
+    endif()
+else()
+    # Fallback version if no git tag found
+    set(LITEHTML_VERSION_MAJOR 0)
+    set(LITEHTML_VERSION_MINOR 1)
+    set(LITEHTML_VERSION_PATCH 0)
+    set(LITEHTML_VERSION_STRING "${LITEHTML_VERSION_MAJOR}.${LITEHTML_VERSION_MINOR}.${LITEHTML_VERSION_PATCH}")
+    set(LITEHTML_VERSION_FULL "${LITEHTML_VERSION_STRING}-dev")
+endif()
+
+message(STATUS "litehtml version: ${LITEHTML_VERSION_FULL}")
+
+# Configure version header
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/litehtml/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/litehtml/version.h"
+    @ONLY
+)
+
 if (NOT LITEHTML_BUILD_TESTING)
 # Soname
 # MAJOR is incremented when symbols are removed or changed in an incompatible way
 # MINOR is incremented when new symbols are added
-set(PROJECT_MAJOR 0)
-set(PROJECT_MINOR 0)
+set(PROJECT_MAJOR ${LITEHTML_VERSION_MAJOR})
+set(PROJECT_MINOR ${LITEHTML_VERSION_MINOR})
 
 option(EXTERNAL_GUMBO "Link against external gumbo instead of shipping a bundled copy" OFF)
 
@@ -149,6 +193,7 @@ set(HEADER_LITEHTML
 	include/litehtml/flex_line.h
 	include/litehtml/gradient.h
 	include/litehtml/font_description.h
+	${CMAKE_CURRENT_BINARY_DIR}/include/litehtml/version.h
 )
 
 set(PROJECT_LIB_VERSION ${PROJECT_MAJOR}.${PROJECT_MINOR}.0)
@@ -176,6 +221,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_include_directories(${PROJECT_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
 	$<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 target_include_directories(${PROJECT_NAME} PRIVATE include/${PROJECT_NAME})
 
@@ -193,7 +239,19 @@ install(TARGETS ${PROJECT_NAME}
 install(FILES cmake/litehtmlConfig.cmake DESTINATION lib${LIB_SUFFIX}/cmake/litehtml)
 install(EXPORT litehtmlTargets FILE litehtmlTargets.cmake DESTINATION lib${LIB_SUFFIX}/cmake/litehtml)
 
-# Tests
+# Unit Tests
+if(LITEHTML_BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# Examples
+option(LITEHTML_BUILD_EXAMPLES "Build examples" ON)
+if(LITEHTML_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+# Integration Tests
 
 else ()
 	include(ExternalProject)

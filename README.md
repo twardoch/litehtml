@@ -34,28 +34,76 @@ If your needs are to display rich internet applications or cutting-edge HTML5 fe
 *   **Platforms:** Compatible with any platform supporting C++17 and the STL.
 *   **HTML/CSS:** litehtml aims to support common HTML tags and CSS2/CSS3 properties. While not a fully standards-compliant browser engine (and that's not its goal), it supports a significant subset of features sufficient for many use cases, including rendering pages built with frameworks like Bootstrap. A list of supported CSS properties can be found [here](https://docs.google.com/spreadsheet/ccc?key=0AvHXl5n24PuhdHdELUdhaUl4OGlncXhDcDJuM1JpMnc&usp=sharing) (though this list might not be exhaustive or fully up-to-date).
 
-## Installation (Integrating the Library)
+## Installation
 
-litehtml is a library, not a standalone application. To "install" it, you integrate it into your C++ project. The typical way to build litehtml is using CMake:
+### Quick Install (Recommended)
 
-1.  **Clone the repository:**
+Install litehtml using our automated installer:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/litehtml/litehtml/master/install.sh | bash
+```
+
+Or with custom options:
+```bash
+curl -sSL https://raw.githubusercontent.com/litehtml/litehtml/master/install.sh | bash -s -- --version v1.0.0 --prefix /usr/local
+```
+
+### Building from Source
+
+1.  **Install dependencies:**
+    ```bash
+    # Linux (Ubuntu/Debian)
+    sudo apt-get install build-essential cmake git libcairo2-dev libpango1.0-dev libgtk-3-dev
+
+    # macOS
+    brew install cmake cairo pango gtk+3
+
+    # Or use our script
+    ./scripts/install-deps.sh
+    ```
+
+2.  **Clone and build:**
     ```bash
     git clone https://github.com/litehtml/litehtml.git
     cd litehtml
+    ./scripts/build.sh
     ```
-2.  **Build with CMake:**
-    ```bash
-    mkdir build && cd build
-    cmake ..
-    make # or your chosen build system's command, e.g., msbuild on Windows
-    ```
-    This will build the litehtml static or shared library (depending on CMake configuration).
-3.  **Link with your project:**
-    *   Include the `litehtml/include` directory in your project's include paths.
-    *   Link against the compiled litehtml library.
-    *   If you are not using the bundled Gumbo parser (i.e., `EXTERNAL_GUMBO` is ON), ensure you also link against Gumbo.
 
-The `CMakeLists.txt` file provides options like `LITEHTML_BUILD_TESTING` (OFF by default) and `EXTERNAL_GUMBO` (OFF by default, meaning it uses its bundled Gumbo).
+3.  **Run tests:**
+    ```bash
+    ./scripts/test.sh
+    ```
+
+4.  **Install system-wide:**
+    ```bash
+    cd build
+    sudo cmake --install .
+    ```
+
+### CMake Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `LITEHTML_BUILD_TESTING` | OFF | Build unit tests |
+| `LITEHTML_BUILD_EXAMPLES` | ON | Build example programs |
+| `EXTERNAL_GUMBO` | OFF | Use external gumbo parser |
+| `CMAKE_BUILD_TYPE` | Release | Build configuration |
+
+### Usage in Your Project
+
+#### CMake Integration
+```cmake
+find_package(litehtml REQUIRED)
+target_link_libraries(your_target litehtml)
+```
+
+#### Manual Integration
+```bash
+g++ -I/usr/local/include -L/usr/local/lib -llitehtml your_program.cpp
+```
+
+See the [Building Guide](BUILDING.md) for detailed instructions.
 
 ## How to Use litehtml Programmatically
 

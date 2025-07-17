@@ -1,6 +1,7 @@
 #ifndef LITEHTML_H
 #define LITEHTML_H
 
+#include <litehtml/version.h>
 #include <litehtml/html.h>
 #include <litehtml/document.h>
 #include <litehtml/html_tag.h>
