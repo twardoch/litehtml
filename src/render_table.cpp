@@ -455,15 +455,12 @@ void litehtml::render_item_table::draw_children(uint_ptr hdc, pixel_t x, pixel_t
     position pos  = m_pos;
     pos.x        += x;
     pos.y        += y;
-    // Table caption/row/cell drawing goes directly through src_el()->draw()
-    // here rather than through the generic render_item::draw_stacking_context()
-    // path, which is where is_visible() (the CSS visibility/display gate) is
-    // normally checked. Without checking it here too, visibility:hidden (and
-    // display:none reached this way) on a <caption>, <tr>, <td> or <th> has
-    // no effect: its content, background and border still paint.
     for(auto& caption : m_grid->captions())
     {
-        if(!caption->is_visible()) continue;
+        if(!caption->is_visible())
+        {
+            continue;
+        }
         if(flag == draw_block)
         {
             caption->src_el()->draw(hdc, pos.x, pos.y, clip, caption);
